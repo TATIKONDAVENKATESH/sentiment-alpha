@@ -1,0 +1,4 @@
+segment,n_traders,avg_total_trades,avg_trade_size,avg_win_rate,avg_buy_pct,avg_fees,avg_pnl_std,avg_risk_adjusted,avg_trades_per_day
+Top 20%,7,14015.5714,10821.4419,0.8469,0.4638,18764.6155,2287.0101,0.1563,250.3958
+Middle 60%,18,5187.2222,3572.3237,0.8886,0.4703,4004.1209,1049.427,0.2318,64.469
+Bottom 20%,7,2820.7143,7457.4028,0.7544,0.441,6061.6052,834.3116,0.0388,98.4704
