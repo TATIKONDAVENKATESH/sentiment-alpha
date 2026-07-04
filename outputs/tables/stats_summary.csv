@@ -1,0 +1,9 @@
+test,statistic,p_value,significant,effect_size
+kruskal_wallis_closed_pnl_by_sentiment,730.3288184196834,9.436006291060192e-157,True,
+chi_square_sentiment_vs_profitability,1976.4503431709786,0.0,True,0.1375905303109701
+spearman_daily_n_trades_vs_total_pnl,0.3461843268119839,7.447180212026565e-49,True,
+spearman_daily_n_trades_vs_pnl_per_trade,-0.13717808440588197,1.4533546690031826e-08,True,
+spearman_daily_n_trades_vs_win_rate,-0.18400370672442604,2.3351656615544234e-14,True,
+spearman_daily_n_trades_vs_total_fees,0.6136064657362077,3.0193611090722716e-242,True,
+spearman_size_usd_vs_closed_pnl,0.48014912786210523,0.0,True,
+mannwhitney_winrate_top20_vs_bottom20,38.0,0.09731934731934733,False,

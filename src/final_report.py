@@ -23,6 +23,17 @@ asset_perf = pd.read_csv(TAB / "asset_performance.csv", index_col=0)
 corr = pd.read_csv(TAB / "correlation_matrix_spearman.csv", index_col=0)
 sent_dist = pd.read_csv(TAB / "sentiment_distribution.csv", index_col=0)
 trader_all = pd.read_csv(TAB / "trader_level_aggregates_all.csv", index_col=0)
+stats_summary = pd.read_csv(TAB / "stats_summary.csv", index_col=0)
+
+kw_stat = stats_summary.loc["kruskal_wallis_closed_pnl_by_sentiment", "statistic"]
+kw_p = stats_summary.loc["kruskal_wallis_closed_pnl_by_sentiment", "p_value"]
+chi_stat = stats_summary.loc["chi_square_sentiment_vs_profitability", "statistic"]
+chi_p = stats_summary.loc["chi_square_sentiment_vs_profitability", "p_value"]
+cramers_v = stats_summary.loc["chi_square_sentiment_vs_profitability", "effect_size"]
+mw_p = stats_summary.loc["mannwhitney_winrate_top20_vs_bottom20", "p_value"]
+rho_fees = stats_summary.loc["spearman_daily_n_trades_vs_total_fees", "statistic"]
+rho_pnlpertrade = stats_summary.loc["spearman_daily_n_trades_vs_pnl_per_trade", "statistic"]
+rho_size_fee = corr.loc["size_usd", "fee"]
 
 most_total = perf["total_pnl"].idxmax()
 least_total = perf["total_pnl"].idxmin()
@@ -91,7 +102,7 @@ report = f"""# Executive Summary — Bitcoin Sentiment vs. Hyperliquid Trader Be
   ({most_total}) is *not* the same as the one with the best risk-adjusted return, meaning
   {most_total} periods carry more volatility per unit of return.
 - A **Kruskal-Wallis test** confirmed closed PnL distributions differ significantly across
-  sentiment categories (H=730.33, p≈9.4e-157, alpha=0.05).
+  sentiment categories (H={kw_stat:.2f}, p≈{kw_p:.2g}, alpha=0.05).
 - A **winsorized robustness check** (1st/99th percentile clipping) found the top sentiment by
   mean PnL was **{winsor_leader}** both before and after winsorization — this particular
   conclusion is robust to extreme values, even though total-PnL rankings are not.
@@ -108,14 +119,14 @@ report = f"""# Executive Summary — Bitcoin Sentiment vs. Hyperliquid Trader Be
   {behavior['buy_pct'].max()*100:.1f}% across sentiment categories — traders in this dataset do
   not dramatically shift BUY/SELL mix with sentiment.
 - A **chi-square test** confirmed sentiment and trade profitability are significantly
-  associated (Cramer's V ≈ 0.14, a modest/moderate effect size — statistically real but not huge
-  in practical terms).
+  associated (Chi2={chi_stat:.2f}, p≈{chi_p:.2g}, Cramer's V ≈ {cramers_v:.2f}, a modest/moderate
+  effect size — statistically real but not huge in practical terms).
 
 ## 6. Differences Between Successful and Unsuccessful Traders (Top 20% vs Bottom 20% by total PnL)
 - Top 20% traders average **{seg.loc['Top 20%','avg_win_rate']*100:.1f}%** win rate vs
   **{seg.loc['Bottom 20%','avg_win_rate']*100:.1f}%** for Bottom 20% (Mann-Whitney U-test,
-  p=0.097 — not statistically significant at the 32-trader sample size available; a directional
-  but not conclusively proven difference).
+  p={mw_p:.3f} — not statistically significant at the {total_traders}-trader sample size
+  available; a directional but not conclusively proven difference).
 - Top 20% traders trade **more** frequently ({seg.loc['Top 20%','avg_trades_per_day']:.1f}
   trades/active day) than Bottom 20% traders ({seg.loc['Bottom 20%','avg_trades_per_day']:.1f}) —
   in this dataset, higher activity is associated with the *top* performers, not overtrading
@@ -133,9 +144,9 @@ report = f"""# Executive Summary — Bitcoin Sentiment vs. Hyperliquid Trader Be
 - The single largest loss on any trade occurred during **{risk['max_loss'].idxmin()}**
   (${risk['max_loss'].min():,.2f}).
 - At the trader-day level, trade frequency correlates positively with total fees paid
-  (Spearman rho reported in the full log ≈0.61, strong) and negatively with per-trade PnL
-  (rho ≈ -0.14, weak-but-significant) — more trades in a day tends to come with a lower
-  average payoff per trade, even though total PnL still rises with volume.
+  (Spearman rho≈{rho_fees:.2f}, strong) and negatively with per-trade PnL
+  (rho≈{rho_pnlpertrade:.2f}, weak-but-significant) — more trades in a day tends to come with a
+  lower average payoff per trade, even though total PnL still rises with volume.
 - {top5_share_line}
 - {top1_line}
 
@@ -145,7 +156,7 @@ report = f"""# Executive Summary — Bitcoin Sentiment vs. Hyperliquid Trader Be
   risk-adjusted metrics tell a materially different story in this data.
 - Use sentiment as a *volatility/risk signal* rather than a blind directional signal: PnL
   volatility and risk-adjusted returns vary meaningfully by sentiment (Kruskal-Wallis
-  p≈9.4e-157), but a simple BUY-in-Greed / SELL-in-Fear rule is not clearly supported once
+  p≈{kw_p:.2g}), but a simple BUY-in-Greed / SELL-in-Fear rule is not clearly supported once
   extreme trades are excluded (Section 8's direction robustness check).
 
 **Weak / exploratory (directional but not statistically conclusive at n=32 traders):**
@@ -154,8 +165,8 @@ report = f"""# Executive Summary — Bitcoin Sentiment vs. Hyperliquid Trader Be
   to confirm this is a real skill signal rather than noise.
 
 **Correlations that do not establish causation:**
-- size_usd and fee are highly correlated (rho=0.82) simply because Hyperliquid fees scale with
-  notional size — this is a mechanical relationship, not a behavioral insight.
+- size_usd and fee are highly correlated (rho={rho_size_fee:.2f}) simply because Hyperliquid fees
+  scale with notional size — this is a mechanical relationship, not a behavioral insight.
 - Trade frequency correlating with lower per-trade PnL does not prove that trading less would
   make any individual trader more profitable; it may simply reflect that active market-making
   style accounts naturally have smaller average PnL per fill while accumulating profit through

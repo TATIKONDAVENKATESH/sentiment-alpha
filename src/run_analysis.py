@@ -35,7 +35,17 @@ def section(title):
 
 def save_table(df, name):
     path = TABLE_DIR / f"{name}.csv"
-    df.to_csv(path, index=True if df.index.name else False)
+    # BUGFIX: `df.index.name` is None both for a MultiIndex (it has `.names`,
+    # not `.name`) and for a meaningful-but-unnamed single Index (e.g. a
+    # correlation matrix, whose row labels match its column labels). The old
+    # check `index=True if df.index.name else False` silently dropped row
+    # labels in both cases, making direction_performance_by_sentiment.csv,
+    # segment_performance_by_sentiment.csv, and correlation_matrix_spearman.csv
+    # impossible to interpret (no way to tell which row is which sentiment/
+    # segment/side/variable). Only a plain default RangeIndex (produced by an
+    # explicit .reset_index()) should be omitted.
+    has_meaningful_index = not isinstance(df.index, pd.RangeIndex)
+    df.to_csv(path, index=has_meaningful_index)
     print(f"Saved table: {path}")
 
 
@@ -73,7 +83,7 @@ print(df["fee"].describe())
 # --- EDA visuals ---
 fig, ax = plt.subplots(figsize=(9, 5))
 sns.countplot(x="sentiment", data=df, order=SENTIMENT_ORDER,
-              palette=SENTIMENT_PALETTE, ax=ax)
+              hue="sentiment", palette=SENTIMENT_PALETTE, legend=False, ax=ax)
 ax.set_title("Number of Trade Fills by Market Sentiment")
 ax.set_xlabel("Sentiment"); ax.set_ylabel("Number of trades")
 format_large_numbers(ax)
@@ -153,7 +163,8 @@ print(f"Total PnL and median PnL point to the {'SAME' if same_story else 'DIFFER
 
 fig, ax = plt.subplots(figsize=(9, 5))
 sns.barplot(x=perf_by_sentiment.index, y=perf_by_sentiment["total_pnl"],
-            order=SENTIMENT_ORDER, palette=SENTIMENT_PALETTE, ax=ax)
+            order=SENTIMENT_ORDER, hue=perf_by_sentiment.index,
+            palette=SENTIMENT_PALETTE, legend=False, ax=ax)
 ax.set_title("Total Closed PnL by Market Sentiment")
 ax.set_xlabel("Sentiment"); ax.set_ylabel("Total Closed PnL (USD)")
 format_large_numbers(ax)
@@ -161,18 +172,21 @@ save_fig(fig, "05_total_pnl_by_sentiment")
 
 fig, ax = plt.subplots(1, 2, figsize=(14, 5))
 sns.barplot(x=perf_by_sentiment.index, y=perf_by_sentiment["mean_pnl"],
-            order=SENTIMENT_ORDER, palette=SENTIMENT_PALETTE, ax=ax[0])
+            order=SENTIMENT_ORDER, hue=perf_by_sentiment.index,
+            palette=SENTIMENT_PALETTE, legend=False, ax=ax[0])
 ax[0].set_title("Mean PnL by Sentiment"); ax[0].set_xlabel(""); ax[0].set_ylabel("Mean PnL (USD)")
 ax[0].tick_params(axis='x', rotation=30)
 sns.barplot(x=perf_by_sentiment.index, y=perf_by_sentiment["median_pnl"],
-            order=SENTIMENT_ORDER, palette=SENTIMENT_PALETTE, ax=ax[1])
+            order=SENTIMENT_ORDER, hue=perf_by_sentiment.index,
+            palette=SENTIMENT_PALETTE, legend=False, ax=ax[1])
 ax[1].set_title("Median PnL by Sentiment"); ax[1].set_xlabel(""); ax[1].set_ylabel("Median PnL (USD)")
 ax[1].tick_params(axis='x', rotation=30)
 save_fig(fig, "06_mean_vs_median_pnl_by_sentiment")
 
 fig, ax = plt.subplots(figsize=(9, 5))
 sns.barplot(x=perf_by_sentiment.index, y=perf_by_sentiment["win_rate"] * 100,
-            order=SENTIMENT_ORDER, palette=SENTIMENT_PALETTE, ax=ax)
+            order=SENTIMENT_ORDER, hue=perf_by_sentiment.index,
+            palette=SENTIMENT_PALETTE, legend=False, ax=ax)
 ax.set_title("Win Rate by Market Sentiment")
 ax.set_xlabel("Sentiment"); ax.set_ylabel("Win rate (%)")
 save_fig(fig, "07_win_rate_by_sentiment")
@@ -182,7 +196,7 @@ plot_data = closing_sent.copy()
 plot_data["pnl_clip"] = plot_data["closed_pnl"].clip(
     plot_data["closed_pnl"].quantile(0.02), plot_data["closed_pnl"].quantile(0.98))
 sns.boxplot(x="sentiment", y="pnl_clip", data=plot_data, order=SENTIMENT_ORDER,
-            palette=SENTIMENT_PALETTE, ax=ax, showfliers=False)
+            hue="sentiment", palette=SENTIMENT_PALETTE, legend=False, ax=ax, showfliers=False)
 ax.axhline(0, color="black", linewidth=0.8)
 ax.set_title("Closed PnL Distribution by Sentiment (2nd-98th pct, outliers hidden)")
 ax.set_xlabel("Sentiment"); ax.set_ylabel("Closed PnL (USD)")
@@ -222,7 +236,8 @@ save_table(behavior_by_sentiment.round(4), "behavior_by_sentiment")
 
 fig, ax = plt.subplots(figsize=(9, 5))
 sns.barplot(x=behavior_by_sentiment.index, y=behavior_by_sentiment["avg_trade_size"],
-            order=SENTIMENT_ORDER, palette=SENTIMENT_PALETTE, ax=ax)
+            order=SENTIMENT_ORDER, hue=behavior_by_sentiment.index,
+            palette=SENTIMENT_PALETTE, legend=False, ax=ax)
 ax.set_title("Average Trade Size (USD) by Sentiment")
 ax.set_xlabel("Sentiment"); ax.set_ylabel("Avg trade size (USD)")
 format_large_numbers(ax)
@@ -381,7 +396,7 @@ print(f"\nTop 20% traders average {top_freq:.2f} trades/active day vs "
       f"{'Top traders trade MORE' if top_freq > bottom_freq else 'Bottom traders trade MORE (possible overtrading signal)'}")
 
 section("PHASE 15 (partial): Mann-Whitney - win rate, Top 20% vs Bottom 20%")
-sh.mannwhitney_test(
+mw_result = sh.mannwhitney_test(
     qualified.loc[qualified["segment"] == "Top 20%", "win_rate"].values,
     qualified.loc[qualified["segment"] == "Bottom 20%", "win_rate"].values,
     "Top 20%", "Bottom 20%", "win_rate"
@@ -398,10 +413,10 @@ trader_day_to_save = trader_day.copy()
 trader_day_to_save[numeric_day_cols] = trader_day_to_save[numeric_day_cols].round(4)
 save_table(trader_day_to_save, "trader_day_aggregates")
 
-sh.spearman_corr(trader_day["n_trades"], trader_day["total_pnl"], "n_trades", "total_pnl")
+res_freq_totalpnl = sh.spearman_corr(trader_day["n_trades"], trader_day["total_pnl"], "n_trades", "total_pnl")
 res_freq_pnlpertrade = sh.spearman_corr(trader_day["n_trades"], trader_day["pnl_per_trade"], "n_trades", "pnl_per_trade")
-sh.spearman_corr(trader_day["n_trades"], trader_day["win_rate"], "n_trades", "win_rate")
-sh.spearman_corr(trader_day["n_trades"], trader_day["total_fees"], "n_trades", "total_fees")
+res_freq_winrate = sh.spearman_corr(trader_day["n_trades"], trader_day["win_rate"], "n_trades", "win_rate")
+res_freq_fees = sh.spearman_corr(trader_day["n_trades"], trader_day["total_fees"], "n_trades", "total_fees")
 
 fig, ax = plt.subplots(figsize=(9, 5))
 bucket_edges = [0, 5, 10, 20, 50, trader_day["n_trades"].max() + 1]
@@ -446,7 +461,7 @@ save_table(risk_by_sentiment.round(4), "risk_by_sentiment")
 print("\nNOTE: No 'leverage' column exists in the raw dataset -> leverage-based "
       "risk metrics are not computed (documented limitation).")
 
-sh.spearman_corr(closing_sent["size_usd"], closing_sent["closed_pnl"], "size_usd", "closed_pnl")
+res_size_pnl = sh.spearman_corr(closing_sent["size_usd"], closing_sent["closed_pnl"], "size_usd", "closed_pnl")
 
 extreme_greed_loss = risk_by_sentiment.loc["Extreme Greed", "max_loss"]
 fear_loss = risk_by_sentiment.loc["Fear", "max_loss"]
@@ -590,6 +605,33 @@ original_leader = perf_by_sentiment["mean_pnl"].idxmax()
 print(f"\nMost profitable sentiment by winsorized mean PnL: {winsor_leader} "
       f"(original unwinsorized mean-PnL leader was {original_leader}) -> "
       f"conclusion {'UNCHANGED' if winsor_leader == original_leader else 'CHANGES under winsorization, indicating mean PnL by sentiment is sensitive to extreme trades'}")
+
+# ====================================================================
+# CONSOLIDATED STATISTICAL TEST SUMMARY
+# ====================================================================
+# Saved so that final_report.py can read every statistic back from a CSV
+# table instead of hard-typing test results in the executive summary.
+stats_summary_rows = [
+    {"test": "kruskal_wallis_closed_pnl_by_sentiment", "statistic": kw_result["stat"],
+     "p_value": kw_result["p"], "significant": kw_result["significant"], "effect_size": np.nan},
+    {"test": "chi_square_sentiment_vs_profitability", "statistic": chi_result["stat"],
+     "p_value": chi_result["p"], "significant": chi_result["significant"],
+     "effect_size": chi_result["cramers_v"]},
+    {"test": "spearman_daily_n_trades_vs_total_pnl", "statistic": res_freq_totalpnl["rho"],
+     "p_value": res_freq_totalpnl["p"], "significant": res_freq_totalpnl["significant"], "effect_size": np.nan},
+    {"test": "spearman_daily_n_trades_vs_pnl_per_trade", "statistic": res_freq_pnlpertrade["rho"],
+     "p_value": res_freq_pnlpertrade["p"], "significant": res_freq_pnlpertrade["significant"], "effect_size": np.nan},
+    {"test": "spearman_daily_n_trades_vs_win_rate", "statistic": res_freq_winrate["rho"],
+     "p_value": res_freq_winrate["p"], "significant": res_freq_winrate["significant"], "effect_size": np.nan},
+    {"test": "spearman_daily_n_trades_vs_total_fees", "statistic": res_freq_fees["rho"],
+     "p_value": res_freq_fees["p"], "significant": res_freq_fees["significant"], "effect_size": np.nan},
+    {"test": "spearman_size_usd_vs_closed_pnl", "statistic": res_size_pnl["rho"],
+     "p_value": res_size_pnl["p"], "significant": res_size_pnl["significant"], "effect_size": np.nan},
+    {"test": "mannwhitney_winrate_top20_vs_bottom20", "statistic": mw_result["stat"],
+     "p_value": mw_result["p"], "significant": mw_result["significant"], "effect_size": np.nan},
+]
+stats_summary = pd.DataFrame(stats_summary_rows).set_index("test")
+save_table(stats_summary, "stats_summary")
 
 section("PHASES 5-17 COMPLETE")
 print("Proceed to hidden-pattern synthesis and executive summary (see outputs/tables and outputs/figures).")

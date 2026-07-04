@@ -5,6 +5,19 @@ import nbformat as nbf
 from pathlib import Path
 
 nb = nbf.v4.new_notebook()
+nb["metadata"] = {
+    "kernelspec": {
+        "display_name": "Python 3",
+        "language": "python",
+        "name": "python3",
+    },
+    "language_info": {
+        "name": "python",
+        "file_extension": ".py",
+        "mimetype": "text/x-python",
+        "pygments_lexer": "ipython3",
+    },
+}
 cells = []
 
 def md(text):
